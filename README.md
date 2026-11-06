@@ -77,6 +77,7 @@ platform\steam\ue4ss\Mods\PBZAchDiag\
 [6] PlatformPending ok=true type=userdata
   pending count=0
 [7] recorded=64 missing(1)=ACH_053
+[8] meta ACH_066 recorded=false
 [done]
 ```
 
@@ -85,7 +86,8 @@ platform\steam\ue4ss\Mods\PBZAchDiag\
 | 字段 | 含义 |
 |---|---|
 | `[5] count=` | 这个存档里已记录的成就数量 |
-| `[7] missing(n)=` | 按 `ACH_001`～`ACH_066` 编号推算出的缺口（**本作成就编号连续，若版本更新导致编号变化请自行调整**） |
+| `[7] missing(n)=` | 按 `ACH_001`～`ACH_065` 编号推算出的缺口（**本作成就编号连续，若版本更新导致编号变化请自行调整**） |
+| `[8] meta recorded=` | 元成就 `ACH_066` 是否已写进这份存档（未完成时恒为 `false`，属正常） |
 | `[6] pending count=` | 待推送队列，>0 表示有成就尚未推到 Steam |
 
 典型结论：

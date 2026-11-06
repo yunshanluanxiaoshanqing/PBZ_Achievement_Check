@@ -115,15 +115,16 @@ local function grab()
         end
     end
 
-    -- summary: which of the 66 IDs are absent from this save
+    -- summary: which of the 65 regular IDs are absent from this save, plus the meta flag
     if okU and u ~= nil then
         local have = collectIds(u)
         local missing = {}
-        for i = 1, 66 do
+        for i = 1, 65 do
             local id = string.format("ACH_%03d", i)
             if not have[id] then missing[#missing + 1] = id end
         end
         w("[7] recorded=" .. tostring(num(u)) .. " missing(" .. #missing .. ")=" .. table.concat(missing, ","))
+        w("[8] meta ACH_066 recorded=" .. tostring(have["ACH_066"] ~= nil))
     end
 
     w("[done]")
