@@ -2,32 +2,29 @@
     影之刃零 · 成就检测（只读）
     Phantom Blade Zero - achievement check (read-only)
 
-    版本：1.1.0
+    版本：1.2.0
     许可：MIT
 
     作用：
         游戏把「已解锁成就」记录在存档内部（PBZAchievementSave.UnlockedIds），
-        而 .sav 文件本身是加密的。本模组在游戏运行时读取这份记录，输出一份文本报告，
-        并在桌面生成一张示意图，用来判断「还差哪个成就没被存档记住」。
+        而 .sav 文件本身是加密的。本模组在游戏运行时读取这份记录，
+        在桌面生成一份文本报告：先给结论，再给明细。
 
     安全：
         只做对象查找和属性读取，不修改存档、不调用任何解锁 / 重置接口。
 
     用法：
-        进入游戏并载入存档，等几秒，按 F7。输出见游戏根目录的文本报告。
+        进入游戏并载入存档，等几秒，按 F7。
 ]]
 
-local VERSION  = "1.1.0"
-local OUT_NAME = "PBZ_Achievement_Check.txt"   -- 写在游戏根目录
-local CAPTURE  = Key.F7
-local HINT     = Key.F6
-local AUTO_PNG = true                          -- 检测完成后自动在桌面生成图片
-local TOTAL    = 65                            -- 常规成就数量，ACH_066 是「完成其余全部成就」的元成就
+local VERSION = "1.2.0"
+local OUT_NAME = "PBZ_Achievement_Check.txt"   -- 文件名保持 ASCII，中文名在部分编码下会写不出来
+local CAPTURE = Key.F7
+local HINT    = Key.F6
+local TOTAL   = 65                             -- 常规成就数量；ACH_066 是「完成其余全部成就」的元成就
 
 -- 游戏进程的工作目录是 ...\ProjectPBZ\Binaries\Win64，向上三级即游戏根目录
 local ROOT = "../../../"
--- 图片渲染脚本（与本模组放在同一目录）
-local PS1  = ROOT .. "platform/steam/ue4ss/Mods/PBZAchDiag/Report.ps1"
 
 -- ============================================================
 -- 成就 ID → 中文名（取自 Steam 成就定义，用于报告里的可读名称）
@@ -142,9 +139,42 @@ local function collectIds(arr)
     return set
 end
 
--- 拼出报告文本
-local function buildReport(have, pending, path)
+-- 取环境变量（部分环境可能禁用 os.getenv，故用 pcall 包住）
+local function env(name)
+    local ok, v = pcall(function() return os.getenv(name) end)
+    if ok then return v end
+    return nil
+end
+
+-- 生成候选输出路径：桌面优先，其次游戏根目录，最后当前目录
+local function candidates()
+    local list = {}
+    local up = env("USERPROFILE")
+    local od = env("OneDrive")
+    if up then list[#list + 1] = up .. "\\Desktop\\" .. OUT_NAME end
+    if od then list[#list + 1] = od .. "\\Desktop\\" .. OUT_NAME end
+    list[#list + 1] = ROOT .. OUT_NAME
+    list[#list + 1] = OUT_NAME
+    return list
+end
+
+-- 写文件：依次尝试候选路径，返回实际写入的路径
+local function writeFile(text)
+    for _, path in ipairs(candidates()) do
+        local fh = io.open(path, "w")
+        if fh then
+            fh:write(text)
+            fh:close()
+            return path
+        end
+    end
+    return nil
+end
+
+-- 拼出报告文本：先结果，后详情
+local function buildReport(have, pending)
     local time = os.date("%Y-%m-%d %H:%M:%S")
+
     local recorded = 0
     for i = 1, TOTAL do
         if have[string.format("ACH_%03d", i)] then recorded = recorded + 1 end
@@ -157,70 +187,43 @@ local function buildReport(have, pending, path)
     end
 
     local L = {}
-    L[#L + 1] = "影之刃零 · 成就检测报告"
+    L[#L + 1] = "影之刃零 · 成就检测"
     L[#L + 1] = "生成时间：" .. time
+
+    -- 结果区：第一眼就能看到缺不缺、缺哪条
+    L[#L + 1] = ""
+    L[#L + 1] = "================ 结果 ================"
+    if #missing == 0 then
+        L[#L + 1] = string.format("全部成就均已记录（%d / %d），存档状态完整。", recorded, TOTAL)
+    else
+        L[#L + 1] = string.format("缺少 %d 个成就（存档记录 %d / %d）：", #missing, recorded, TOTAL)
+        for _, id in ipairs(missing) do
+            L[#L + 1] = "    " .. id .. "  " .. (NAMES[id] or "未知成就")
+        end
+        L[#L + 1] = "请在当前存档里重新完成上面这些条件，然后按 F7 复查。"
+    end
+
+    -- 详情区
+    L[#L + 1] = ""
+    L[#L + 1] = "================ 详情 ================"
     L[#L + 1] = "检测来源：当前存档内的成就记录（PBZAchievementSave.UnlockedIds）"
     L[#L + 1] = string.format("存档记录：%d / %d", recorded, TOTAL)
-    L[#L + 1] = "缺失数量：" .. #missing
+    L[#L + 1] = string.format("缺失数量：%d", #missing)
     L[#L + 1] = "元成就：" .. META .. "  已记录=" .. tostring(have[META] ~= nil)
     L[#L + 1] = "待推送队列：" .. tostring(pending)
-    if #missing == 0 then
-        L[#L + 1] = "结论：全部成就均已记录，存档状态完整。"
-    else
-        L[#L + 1] = "结论：存在缺失，需要在当前存档里重新完成对应条件。"
-    end
-
     L[#L + 1] = ""
-    L[#L + 1] = "【缺失成就】"
-    if #missing == 0 then
-        L[#L + 1] = "（无）"
-    else
-        for _, id in ipairs(missing) do
-            L[#L + 1] = id .. "  " .. (NAMES[id] or "未知成就")
-        end
-    end
-
-    L[#L + 1] = ""
-    L[#L + 1] = "【已记录成就】"
+    L[#L + 1] = string.format("已记录成就（%d 条）：", recorded)
     for i = 1, TOTAL do
         local id = string.format("ACH_%03d", i)
-        if have[id] then L[#L + 1] = id .. "  " .. (NAMES[id] or "未知成就") end
+        if have[id] then L[#L + 1] = "    " .. id .. "  " .. (NAMES[id] or "未知成就") end
     end
 
     L[#L + 1] = ""
     L[#L + 1] = "由 PBZAchDiag 生成 · 只读检测，未修改存档"
-    return table.concat(L, "\n"), recorded, #missing, missing, path
+    return table.concat(L, "\n"), recorded, #missing, missing
 end
 
--- 写文件：优先游戏根目录，失败则退回当前工作目录
-local function writeFile(text)
-    local fh = io.open(ROOT .. OUT_NAME, "w")
-    local path = ROOT .. OUT_NAME
-    if not fh then
-        fh = io.open(OUT_NAME, "w")
-        path = OUT_NAME
-    end
-    if not fh then return nil end
-    fh:write(text)
-    fh:close()
-    return path
-end
-
--- 调用 PowerShell 把文本报告渲染成桌面图片（失败不影响主流程）
-local function renderPng(txt)
-    if not AUTO_PNG then return end
-    local cmd = string.format(
-        'start "" /b powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%s" -Txt "%s"',
-        PS1, txt)
-    log("[png] 正在生成桌面图片，游戏会卡顿几秒…")
-    local ok, err = pcall(function() os.execute(cmd) end)
-    if not ok then
-        log("[png] 自动生成失败：" .. tostring(err))
-        log("[png] 可手动双击游戏目录下的 生成图片.cmd")
-    end
-end
-
--- 主流程：读取记录 → 生成文本 → 生成图片
+-- 主流程：读取记录 → 生成报告
 local function capture()
     log("---------- 开始检测 @ " .. os.date("%Y-%m-%d %H:%M:%S") .. " ----------")
 
@@ -246,20 +249,22 @@ local function capture()
     local okP, p = pcall(function() return o.PlatformPending end)
     if okP and p ~= nil then pending = tostring(num(p)) end
 
-    local text, recorded, missingCount, missing = buildReport(have, pending, "")
+    local text, recorded, missingCount, missing = buildReport(have, pending)
     local path = writeFile(text)
     if not path then
         log("[x] 无法写入报告文件")
         return
     end
 
-    log(string.format("[ok] 存档记录 %d / %d，缺失 %d 项", recorded, TOTAL, missingCount))
-    for _, id in ipairs(missing) do
-        log("     缺少  " .. id .. "  " .. (NAMES[id] or ""))
+    if missingCount == 0 then
+        log(string.format("[ok] 全部记录齐全 %d / %d", recorded, TOTAL))
+    else
+        log(string.format("[ok] 存档记录 %d / %d，缺失 %d 项", recorded, TOTAL, missingCount))
+        for _, id in ipairs(missing) do
+            log("     缺少  " .. id .. "  " .. (NAMES[id] or ""))
+        end
     end
     log("[ok] 报告已写入：" .. path)
-
-    renderPng(path)
     log("[done]")
 end
 
