@@ -104,7 +104,7 @@ local META = "ACH_066"   -- 元成就：完成其余全部成就
 
 -- 输出到 UE4SS.log，方便排查
 local function log(s)
-    print("[PBZAchDiag] " .. s)
+    print("[PBZAchDiag] " .. s .. "\n")   -- UE4SS 的 print 不会自动换行
 end
 
 -- 把 FName / FString / UObject 之类的值尽量转成字符串
@@ -212,6 +212,7 @@ local function renderPng(txt)
     local cmd = string.format(
         'start "" /b powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%s" -Txt "%s"',
         PS1, txt)
+    log("[png] 正在生成桌面图片，游戏会卡顿几秒…")
     local ok, err = pcall(function() os.execute(cmd) end)
     if not ok then
         log("[png] 自动生成失败：" .. tostring(err))
